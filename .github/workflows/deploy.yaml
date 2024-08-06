@@ -1,0 +1,49 @@
+name: Deploy Cloud Function
+on:
+  push:
+    branches: 
+      - dev
+      - master
+env:
+  PROJECT: cloud_function_get_last_attended_date
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+
+      - uses: actions/checkout@v2
+
+      - name: Setup GCP Service Account
+        uses: google-github-actions/setup-gcloud@v0
+        with:
+          project_id: harper-rand
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true      
+
+      - name: Set env vars (dev)
+        if: endsWith(github.ref, '/dev')
+        run: |
+          echo "GCF_NAME=get_last_attended_date_dev" >> $GITHUB_ENV
+          echo "AUTH=projects/558716318620/secrets/gcf_endpoint_auth_dev" >> $GITHUB_ENV     
+          echo "INSTANCES=0" >> $GITHUB_ENV
+
+      - name: Set env vars (prod)
+        if: endsWith(github.ref, '/master')
+        run: |
+          echo "GCF_NAME=get_last_attended_date" >> $GITHUB_ENV 
+          echo "AUTH=projects/558716318620/secrets/gcf_endpoint_auth" >> $GITHUB_ENV         
+          echo "INSTANCES=0" >> $GITHUB_ENV
+
+      - name: deploy cloud function
+        id: deploy
+        uses: google-github-actions/deploy-cloud-functions@main
+        with:
+          name: ${{ env.GCF_NAME }}
+          runtime: python39
+          entry_point: get_last_attended_date
+          region: us-west2          
+          project_id: harper-rand
+          min_instance_count: ${{ env.INSTANCES }}
+          service_account: hr-secret-manager-cloud-sql@harper-rand.iam.gserviceaccount.com
+          secrets: "encryption_key=projects/558716318620/secrets/encryption_key,db_user=projects/558716318620/secrets/cloud_sql_api_auth_db_user,db_pass=projects/558716318620/secrets/cloud_sql_api_auth_db_password,db_connection_name=projects/558716318620/secrets/cloud_sql_api_auth_db_connection"
